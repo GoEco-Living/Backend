@@ -38,7 +38,7 @@ pool.query('SELECT 1')
 app.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
 
-  try { 
+  try {
     const [existingUsers] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
     
     if (existingUsers.length > 0) {
@@ -98,72 +98,183 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Endpoint untuk Menyimpan Data Makanan (Meals)
+// Endpoint Meals
 app.post('/meals', async (req, res) => {
-  const { userId, type, carbonEmission, description } = req.body;
+  const { userId, type } = req.body;
+  
   try {
-    // Menyimpan data makanan ke tabel meals
-    const [mealResult] = await pool.query(
-      'INSERT INTO meals (type, carbonEmission, description) VALUES (?, ?, ?)',
-      [type, carbonEmission, description]
+    // Cari id tipe meal berdasarkan tipe yang dipilih
+    const [mealType] = await pool.query(
+      'SELECT id, carbonEmission FROM meal_types WHERE type = ?',
+      [type]
     );
 
-    // Menyimpan relasi antara pengguna dan makanan
-    await pool.query(
-      'INSERT INTO user_meals (user_id, meal_id) VALUES (?, ?)',
-      [userId, mealResult.insertId]
+    if (mealType.length === 0) {
+      return res.status(400).json({ error: 'Invalid meal type' });
+    }
+
+    const mealTypeId = mealType[0].id;
+    const carbonEmission = mealType[0].carbonEmission;  // Dapatkan emisi karbon dari mealType yang dipilih
+
+    // Menyimpan meal pilihan user ke database
+    const [result] = await pool.query(
+      'INSERT INTO meals (user_id, meal_type_id, carbonEmission) VALUES (?, ?, ?)',
+      [userId, mealTypeId, carbonEmission]
     );
 
-    res.status(201).json({ message: "Meal added successfully", meal: mealResult });
+    res.status(201).json({
+      message: "Meal added successfully",
+      meal: { type, userId, carbonEmission }
+    });
   } catch (err) {
-    res.status(500).json({ message: "Error adding meal", err });
+    console.error("Error adding meal:", err);
+    res.status(500).json({
+      message: "Error adding meal",
+      error: err.message
+    });
   }
 });
 
-// Endpoint untuk Menyimpan Data Transportasi (Transport)
+// Endpoint Transport
 app.post('/transport', async (req, res) => {
-  const { userId, type, carbonEmission, description } = req.body;
+  const { userId, type, distance } = req.body;
+
   try {
-    // Menyimpan data transportasi ke tabel transport
-    const [transportResult] = await pool.query(
-      'INSERT INTO transport (type, carbonEmission, description) VALUES (?, ?, ?)',
-      [type, carbonEmission, description]
+    // Cari id tipe transportasi berdasarkan tipe yang dipilih
+    const [transportType] = await pool.query(
+      'SELECT id, carbonEmission FROM transport_types WHERE type = ?',
+      [type]
     );
 
-    // Menyimpan relasi antara pengguna dan transportasi
-    await pool.query(
-      'INSERT INTO user_transport (user_id, transport_id) VALUES (?, ?)',
-      [userId, transportResult.insertId]
+    if (transportType.length === 0) {
+      return res.status(400).json({ error: 'Invalid transport type' });
+    }
+
+    const transportTypeId = transportType[0].id;
+    const carbonEmission = transportType[0].carbonEmission;  // Dapatkan emisi karbon dari transportType yang dipilih
+
+    // Menyimpan transportasi pilihan user ke database
+    const [result] = await pool.query(
+      'INSERT INTO transport (user_id, transport_type_id, distance, carbonEmission) VALUES (?, ?, ?, ?)',
+      [userId, transportTypeId, distance, carbonEmission]
     );
 
-    res.status(201).json({ message: "Transport added successfully", transport: transportResult });
+    res.status(201).json({
+      message: "Transport added successfully",
+      transport: { type, userId, distance, carbonEmission }
+    });
   } catch (err) {
     res.status(500).json({ message: "Error adding transport", err });
   }
 });
 
-app.get('/user/:userId/recommendation', async (req, res) => {
+// Endpoint Meal Recommendation
+app.get('/user/:userId/meal_recommendation', async (req, res) => {
   const userId = req.params.userId;
 
   const queryMeals = `
-    SELECT m.type, CAST(m.carbonEmission AS DECIMAL(10,2)) AS carbonEmission, m.description
+    SELECT mt.type, m.carbonEmission
     FROM meals m
-    JOIN user_meals um ON m.id = um.meal_id
-    WHERE um.user_id = ?`;
+    INNER JOIN meal_types mt ON m.meal_type_id = mt.id
+    WHERE m.user_id = ?`;
+
+  try {
+    const [mealResults] = await pool.query(queryMeals, [userId]);
+
+    if (mealResults.length === 0) {
+      return res.status(404).json({ message: 'No meals found for this user.' });
+    }
+
+    // Rekomendasi berdasarkan tipe meal yang dipilih
+    let mealRecommendation = '';
+    mealResults.forEach(meal => {
+      if (meal.type === 'Chicken') {
+        mealRecommendation = "Consider switching to a Vegetarian meal to reduce carbon emissions.";
+      } else if (meal.type === 'Vegetarian') {
+        mealRecommendation = "Vegetarian is healthy, but please consider choosing Vegan meals for a lower carbon footprint.";
+      } else if (meal.type === 'Beef') {
+        mealRecommendation = "Beef has a high carbon footprint. Consider choosing Chicken or Vegan meals.";
+      } else if (meal.type === 'Fish') {
+        mealRecommendation = "Consider switching to a Vegetarian meal to reduce carbon emissions.";
+      }
+    });
+
+    res.json({
+      meals: mealResults,
+      mealRecommendation
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching meal recommendations", err });
+  }
+});
+
+// Endpoint Transport Recommendation
+app.get('/user/:userId/transport_recommendation', async (req, res) => {
+  const userId = req.params.userId;
 
   const queryTransport = `
-    SELECT t.type, CAST(t.carbonEmission AS DECIMAL(10,2)) AS carbonEmission, t.description
-    FROM transport t 
-    JOIN user_transport ut ON t.id = ut.transport_id
-    WHERE ut.user_id = ?`;
+    SELECT tt.type, t.distance, t.carbonEmission
+    FROM transport t
+    INNER JOIN transport_types tt ON t.transport_type_id = tt.id
+    WHERE t.user_id = ?`;
+
+  try {
+    const [transportResults] = await pool.query(queryTransport, [userId]);
+
+    if (transportResults.length === 0) {
+      return res.status(404).json({ message: 'No transport found for this user.' });
+    }
+
+    // Rekomendasi berdasarkan tipe transportasi yang dipilih
+    let transportRecommendation = '';
+    transportResults.forEach(transport => {
+      if (transport.type === 'Car') {
+        transportRecommendation = "Consider using Public Transportation instead of a Car to lower your carbon footprint.";
+      } else if (transport.type === 'Motorcycle') {
+        transportRecommendation = "Motorcycles are less eco-friendly. Consider using a Bicycle instead.";
+      } else if (transport.type === 'Walk') {
+        transportRecommendation = "Walking is really eco-friendly! Consider using a Bicycle if you're tired.";
+      } else if (transport.type === 'Bicycle') {
+        transportRecommendation = "Bicycle is eco-friendly. Consider walking if you're looking for a healthier option.";
+      } else if (transport.type === 'Public Transportation') {
+        transportRecommendation = "Public Transportation is less eco-friendly. Consider using a Bicycle or Walk instead.";
+      }
+    });
+
+    res.json({
+      transport: transportResults,
+      transportRecommendation
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching transport recommendations", err });
+  }
+});
+
+// Endpoint Dashboard untuk Menampilkan Meal dan Transportasi Pengguna
+app.get('/user/:userId/dashboard', async (req, res) => {
+  const userId = req.params.userId;
+
+  // Query meals untuk mengambil data meal
+  const queryMeals = `
+    SELECT mt.type, m.carbonEmission
+    FROM meals m
+    INNER JOIN meal_types mt ON m.meal_type_id = mt.id
+    WHERE m.user_id = ?`;
+
+  // Query transport untuk mengambil data transportasi
+  const queryTransport = `
+    SELECT tt.type, t.distance, t.carbonEmission
+    FROM transport t
+    INNER JOIN transport_types tt ON t.transport_type_id = tt.id
+    WHERE t.user_id = ?`;
 
   try {
     const [mealResults] = await pool.query(queryMeals, [userId]);
     const [transportResults] = await pool.query(queryTransport, [userId]);
 
-    let totalCarbonEmission = 0;
+    let totalCarbonEmission = 0.0;
 
-    // Menghitung total emisi karbon dari makanan
+    // Hitung total emisi karbon dari meal
     mealResults.forEach(m => {
       const emission = parseFloat(m.carbonEmission);
       if (!isNaN(emission)) {
@@ -171,71 +282,25 @@ app.get('/user/:userId/recommendation', async (req, res) => {
       }
     });
 
-    // Menghitung total emisi karbon dari transportasi
+    // Hitung total emisi karbon dari transport
     transportResults.forEach(t => {
       const emission = parseFloat(t.carbonEmission);
-      if (!isNaN(emission)) {
-        totalCarbonEmission += emission;
+      const distance = parseFloat(t.distance);
+      if (!isNaN(emission) && !isNaN(distance)) {
+        totalCarbonEmission += emission * distance;
       }
     });
 
-    totalCarbonEmission = totalCarbonEmission.toFixed(2);
-
-    // Menyusun rekomendasi berdasarkan total emisi karbon
-    let recommendation = "You are doing great! Consider reducing carbon emissions by using more sustainable choices.";
-
-    if (parseFloat(totalCarbonEmission) < 50.00) {
-      recommendation = "Great job! Keep up the good work with your eco-friendly choices!";
-    } else if (parseFloat(totalCarbonEmission) >= 50.00 && parseFloat(totalCarbonEmission) <= 100.00) {
-      recommendation = "You're doing well, but you can reduce your carbon footprint by opting for more sustainable meals and transport.";
-    } else if (parseFloat(totalCarbonEmission) > 100.00) {
-      recommendation = "Your carbon footprint is quite high. Consider switching to more eco-friendly meals and transportation options.";
-    }
-
-    res.json({
-      meals: mealResults,
-      transport: transportResults,
-      totalCarbonEmission,
-      recommendation
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Error fetching recommendations", err });
-  }
-});
-
-
-app.get('/user/:userId/dashboard', async (req, res) => {
-  const userId = req.params.userId;
-
-  const queryMeals = `
-    SELECT m.type, m.carbonEmission, m.description
-    FROM meals m
-    JOIN user_meals um ON m.id = um.meal_id
-    WHERE um.user_id = ?`;
-
-  const queryTransport = `
-    SELECT t.type, t.carbonEmission, t.description
-    FROM transport t
-    JOIN user_transport ut ON t.id = ut.transport_id
-    WHERE ut.user_id = ?`;
-
-  try {
-    // Fetch meals dan transport history untuk user tertentu
-    const [mealResults] = await pool.query(queryMeals, [userId]);
-    const [transportResults] = await pool.query(queryTransport, [userId]);
-
-    // Mengembalikan hasil meals dan transport sebagai bagian dari dashboard pengguna
     res.json({
       userId,
-      meals: mealResults,        // Semua makanan yang dipilih oleh pengguna
-      transport: transportResults, // Semua transportasi yang dipilih oleh pengguna
+      meals: mealResults,
+      transport: transportResults,
+      totalCarbonEmission: totalCarbonEmission.toFixed(2) // Menampilkan total emisi dengan dua angka desimal
     });
   } catch (err) {
-    // Menangani error
-    res.status(500).json({ message: "Error fetching user dashboard history", err });
+    res.status(500).json({ message: "Error fetching user dashboard", err });
   }
 });
-
 
 // Middleware untuk memverifikasi token JWT
 const verifyToken = (req, res, next) => {
@@ -250,20 +315,40 @@ const verifyToken = (req, res, next) => {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
     
-    req.userId = decoded.userId;  // Set userId dalam request untuk digunakan di endpoint lain
+    req.userId = decoded.userId;
     next();
   });
 };
 
 // Gunakan middleware ini di endpoint yang membutuhkan autentikasi
 app.get('/user/:userId/dashboard', verifyToken, async (req, res) => {
-  const userId = req.userId;  // Ambil userId dari token yang telah diverifikasi
+  const userId = req.userId;
 
-  // Query untuk mengambil data meals dan transport seperti sebelumnya
+  const queryMeals = `
+    SELECT m.type, m.carbonEmission
+    FROM meals m
+    WHERE m.user_id = ?`;
+
+  const queryTransport = `
+    SELECT t.type, t.distance, t.carbonEmission
+    FROM transport t
+    WHERE t.user_id = ?`;
+
+  try {
+    const [mealResults] = await pool.query(queryMeals, [userId]);
+    const [transportResults] = await pool.query(queryTransport, [userId]);
+
+    res.json({
+      userId,
+      meals: mealResults,
+      transport: transportResults
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching user dashboard", err });
+  }
 });
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
