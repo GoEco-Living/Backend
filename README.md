@@ -21,50 +21,50 @@ Access to Google Cloud Run
 Postman for API testing
 
 # Endpoints
-** 1. Register
+**1. Register
 URL: /register
 Method: POST
-Description: Creates a new user account, 200 if created successfully, 400 if already registered. **
+Description: Creates a new user account, 200 if created successfully, 400 if already registered.**
 
-** 2. Login
+**2. Login
 URL: /login
 Method: POST
-Description: Authenticates a user and provides a token. 200 if login succesfully, 400 if login unsuccessfully. **
+Description: Authenticates a user and provides a token. 200 if login succesfully, 400 if login unsuccessfully.**
 
-** 3. Meals (Add)
+**3. Meals (Add)
 URL: /meals
 Method: POST
-Description: Adds a new meal to the database. 201 if added successfully, 400 if unsuccessful. **
+Description: Adds a new meal to the database. 201 if added successfully, 400 if unsuccessful.**
 
-** 4. Transport (Add)
+**4. Transport (Add)
 URL: /transport
 Method: POST
-Description: Adds a new transport method to the database. 201 if added successfully, 400 if unsuccessful. **
+Description: Adds a new transport method to the database. 201 if added successfully, 400 if unsuccessful.**
 
-** 5. Meals Recommendation
+**5. Meals Recommendation
 URL: /meals/recommendation
 Method: GET
-Description: Provides meal recommendations based on user data. 201 if successfully recommendating, 400 if unsuccessful. **
+Description: Provides meal recommendations based on user data. 201 if successfully recommendating, 400 if unsuccessful.**
 
-** 6. Transport Recommendation
+**6. Transport Recommendation
 URL: /transport/recommendation
 Method: GET
-Description: Provides transport recommendations based on user preferences. 201 if successfully recommendating, 400 if unsuccessful. **
+Description: Provides transport recommendations based on user preferences. 201 if successfully recommendating, 400 if unsuccessful.**
 
-** 7. Meals Prediction
+**7. Meals Prediction
 URL: /meals/predict
 Method: POST
-Description: Predicts meal outcomes using an ML model. 201 if successfully predicted, 400 if unsuccessful. **
+Description: Predicts meal outcomes using an ML model. 201 if successfully predicted, 400 if unsuccessful.**
 
-** 8. Transport Prediction
+**8. Transport Prediction
 URL: /transport/predict
 Method: POST
-Description: Predicts transport outcomes using an ML model. 201 if successfully predicted, 400 if unsuccessful. **
+Description: Predicts transport outcomes using an ML model. 201 if successfully predicted, 400 if unsuccessful.**
 
-** 9. Dashboard
+**9. Dashboard
 URL: /dashboard
 Method: GET
-Description: Fetches dashboard data for visualization. 201 if successfully get the user's input, 400 if unsuccessful. **
+Description: Fetches dashboard data for visualization. 201 if successfully get the user's input, 400 if unsuccessful.**
 
 # Testing with Postman
 Import the API collection into Postman. Use the provided API.postman_collection.json.
