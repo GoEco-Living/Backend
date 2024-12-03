@@ -20,12 +20,6 @@ Docker installed
 Access to Google Cloud Run
 Postman for API testing
 
-# Deployment
-1. Build the Container Image
-  gcloud builds submit --tag gcr.io/<PROJECT-ID>/<SERVICE-NAME>
-2. Deploy the Container Image to Cloud Run
-  gcloud run deploy <SERVICE-NAME> --image gcr.io/<PROJECT-ID>/<SERVICE-NAME> --platform managed
-
 # Endpoints
 ** 1. Register
 URL: /register
@@ -78,4 +72,7 @@ Configure environment variables for base URL and tokens.
 Test each endpoint using the collection.
 
 # Deployment
-Follow the steps in Getting Started to deploy the service on Google Cloud Run.
+1. Build the Container Image
+  gcloud builds submit --tag gcr.io/<PROJECT-ID>/<SERVICE-NAME>
+2. Deploy the Container Image to Cloud Run
+  gcloud run deploy <SERVICE-NAME> --image gcr.io/<PROJECT-ID>/<SERVICE-NAME> --platform managed
