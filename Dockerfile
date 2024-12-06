@@ -1,20 +1,27 @@
-# Menggunakan image resmi Node.js
-FROM node:18
+FROM node:20
 
-# Menetapkan direktori kerja dalam container
+# Set working directory
 WORKDIR /usr/src/app
 
-# Menyalin file package.json dan package-lock.json
-COPY package*.json ./
-
-# Install dependencies
+# Copy package.json and install dependencies
+COPY package*.json ./ 
 RUN npm install
 
-# Menyalin sisa kode aplikasi ke dalam container
+# Install TensorFlow.js for Node.js (if required for ML tasks)
+RUN npm install @tensorflow/tfjs-node
+
+# Copy the rest of the application code
 COPY . .
 
-# Menjalankan aplikasi
+# Set environment variables (URL to models stored in Google Cloud Storage)
+ENV PORT=3000 
+ENV MODEL_URL=https://storage.googleapis.com/geo-ml/meals/model.json
+ENV MODEL_URL2=https://storage.googleapis.com/geo-ml/transport/model.json
+
+# Define health check (Ensure this endpoint is implemented in your Express app)
+HEALTHCHECK CMD curl --fail http://localhost:${PORT}/status || exit 1
+
+# Run the application
 CMD ["npm", "start"]
 
-# Mengekspos port yang digunakan aplikasi
 EXPOSE 8080
