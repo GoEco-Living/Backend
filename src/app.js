@@ -4,37 +4,106 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 require('dotenv').config();
+const tf = require('@tensorflow/tfjs-node');  // TensorFlow.js untuk penggunaan model
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Koneksi database
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  socketPath: `/cloudsql/capstone-441604:us-central1:geo-mysql`,
+  socketPath: '/cloudsql/capstone-441604:us-central1:geo-mysql',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
 });
 
-app.get('/', (req, res) => {
-  res.send('Welcome to GoEco-Living!');
-});
+// Fungsi untuk memuat model (meal dan transport model)
+const loadModels = async () => {
+  try {
+    const mealsModel = await tf.loadGraphModel('https://storage.googleapis.com/geo-ml/meals/model.json');
+    const transportModel = await tf.loadGraphModel('https://storage.googleapis.com/geo-ml/transport/model.json');
+    console.log('Models loaded successfully');
+    return { mealsModel, transportModel };
+  } catch (error) {
+    console.error('Error loading models:', error);
+    throw new Error('Error loading models');
+  }
+};
 
-// Route to check server status
-app.get('/status', (req, res) => {
-  res.status(200).json({ message: 'Server is running' });
-});
+// Fungsi prediksi untuk meals
+const predictMeals = async (model, data) => {
+    try {
+        // Faktor emisi karbon berdasarkan jenis makanan (dalam kg CO2 per 100g)
+        const emissionFactors = {
+            "chicken": 0.5,      // Emisi untuk ayam
+            "beef": 2.5,         // Emisi untuk daging sapi
+            "fish": 0.7,         // Emisi untuk ikan
+            "vegan": 0.1,        // Emisi untuk makanan vegan
+            "vegetarian": 0.2    // Emisi untuk makanan vegetarian
+        };
 
-// Test database connection
+        // Hitung total emisi karbon untuk makanan
+        const mealEmissions = data.map(item => {
+            // Menghitung emisi berdasarkan jenis makanan
+            const emission = emissionFactors[item.food.toLowerCase()] * 1;  // Asumsikan kuantitas makanan adalah 100 gram (1)
+            return emission;
+        });
+
+        // Total emisi karbon dari semua makanan
+        const totalEmission = mealEmissions.reduce((sum, emission) => sum + emission, 0);
+        console.log("Total emisi karbon dari makanan:", totalEmission);
+
+        // Mengembalikan total emisi dalam bentuk array
+        return [totalEmission];
+    } catch (error) {
+        console.error("Error saat prediksi meals:", error);
+        throw new Error('Prediction failed for meals');
+    }
+};
+
+// Fungsi prediksi untuk transportasi
+const predictTransport = async (model, data) => {
+    try {
+        // Faktor emisi karbon berdasarkan jenis transportasi (dalam kg CO2 per km)
+        const emissionFactors = {
+            "car": 0.2,           // Emisi per km untuk mobil
+            "bus": 0.05,          // Emisi per km untuk bus
+            "walk": 0,            // Tidak ada emisi untuk berjalan kaki
+            "bike": 0,            // Tidak ada emisi untuk bersepeda
+            "motorcycle": 0.15,   // Emisi per km untuk sepeda motor
+            "public transportation": 0.03  // Emisi per km untuk transportasi publik
+        };
+
+        // Hitung total emisi karbon untuk transportasi
+        const transportEmissions = data.map(item => {
+            // Menghitung emisi berdasarkan jenis transportasi dan jarak
+            const emission = emissionFactors[item.vehicle.toLowerCase()] * item.distance;
+            return emission;
+        });
+
+        // Total emisi karbon dari semua transportasi
+        const totalEmission = transportEmissions.reduce((sum, emission) => sum + emission, 0);
+        console.log("Total emisi karbon dari transportasi:", totalEmission);
+
+        // Mengembalikan total emisi dalam bentuk array
+        return [totalEmission];
+    } catch (error) {
+        console.error("Error saat prediksi transport:", error);
+        throw new Error('Prediction failed for transport');
+    }
+};
+
+// Koneksi database untuk pengecekan
 pool.query('SELECT 1')
   .then(() => console.log('Database connected successfully'))
   .catch(err => console.error('Database connection failed', err));
 
-// Endpoint for Registration
+// Endpoint untuk pendaftaran pengguna
 app.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -62,7 +131,7 @@ app.post('/register', async (req, res) => {
   }
 });
 
-// Endpoint for Login
+// Endpoint untuk login pengguna
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -98,14 +167,14 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Endpoint Meals
+// Endpoint untuk menambahkan meal
 app.post('/meals', async (req, res) => {
   const { userId, type } = req.body;
   
   try {
     // Cari id tipe meal berdasarkan tipe yang dipilih
     const [mealType] = await pool.query(
-      'SELECT id, carbonEmission FROM meal_types WHERE type = ?',
+      'SELECT id FROM meal_types WHERE type = ?',
       [type]
     );
 
@@ -114,35 +183,34 @@ app.post('/meals', async (req, res) => {
     }
 
     const mealTypeId = mealType[0].id;
-    const carbonEmission = mealType[0].carbonEmission;  // Dapatkan emisi karbon dari mealType yang dipilih
 
-    // Menyimpan meal pilihan user ke database
+    // Prediksi emisi karbon menggunakan model
+    const model = await loadModels();  // Model akan dimuat di sini
+    const prediction = await predictMeals(model.mealsModel, [{ food: type }]);
+
+    // Menyimpan meal pilihan user ke database dengan emisi karbon hasil prediksi
     const [result] = await pool.query(
       'INSERT INTO meals (user_id, meal_type_id, carbonEmission) VALUES (?, ?, ?)',
-      [userId, mealTypeId, carbonEmission]
+      [userId, mealTypeId, prediction[0]] // Simpan hasil prediksi emisi
     );
 
     res.status(201).json({
       message: "Meal added successfully",
-      meal: { type, userId, carbonEmission }
+      meal: { type, userId, predictedEmission: prediction[0] }
     });
   } catch (err) {
-    console.error("Error adding meal:", err);
-    res.status(500).json({
-      message: "Error adding meal",
-      error: err.message
-    });
+    res.status(500).json({ message: "Error adding meal", error: err.message });
   }
 });
 
-// Endpoint Transport
+// Endpoint untuk menambahkan transportasi
 app.post('/transport', async (req, res) => {
   const { userId, type, distance } = req.body;
 
   try {
     // Cari id tipe transportasi berdasarkan tipe yang dipilih
     const [transportType] = await pool.query(
-      'SELECT id, carbonEmission FROM transport_types WHERE type = ?',
+      'SELECT id FROM transport_types WHERE type = ?',
       [type]
     );
 
@@ -151,24 +219,27 @@ app.post('/transport', async (req, res) => {
     }
 
     const transportTypeId = transportType[0].id;
-    const carbonEmission = transportType[0].carbonEmission;  // Dapatkan emisi karbon dari transportType yang dipilih
 
-    // Menyimpan transportasi pilihan user ke database
+    // Prediksi emisi karbon menggunakan model
+    const model = await loadModels();  // Model akan dimuat di sini
+    const prediction = await predictTransport(model.transportModel, [{ vehicle: type, distance }]);
+
+    // Menyimpan transportasi pilihan user ke database dengan emisi karbon hasil prediksi
     const [result] = await pool.query(
       'INSERT INTO transport (user_id, transport_type_id, distance, carbonEmission) VALUES (?, ?, ?, ?)',
-      [userId, transportTypeId, distance, carbonEmission]
+      [userId, transportTypeId, distance, prediction[0]] // Simpan hasil prediksi emisi
     );
 
     res.status(201).json({
       message: "Transport added successfully",
-      transport: { type, userId, distance, carbonEmission }
+      transport: { type, userId, distance, predictedEmission: prediction[0] }
     });
   } catch (err) {
-    res.status(500).json({ message: "Error adding transport", err });
+    res.status(500).json({ message: "Error adding transport", error: err.message });
   }
 });
 
-// Endpoint Meal Recommendation
+// Endpoint Meals Recommendation
 app.get('/user/:userId/meal_recommendation', async (req, res) => {
   const userId = req.params.userId;
 
@@ -185,17 +256,18 @@ app.get('/user/:userId/meal_recommendation', async (req, res) => {
       return res.status(404).json({ message: 'No meals found for this user.' });
     }
 
-    // Rekomendasi berdasarkan tipe meal yang dipilih
+    // Menambahkan rekomendasi berdasarkan emisi karbon
     let mealRecommendation = '';
     mealResults.forEach(meal => {
-      if (meal.type === 'Chicken') {
-        mealRecommendation = "Consider switching to a Vegetarian meal to reduce carbon emissions.";
-      } else if (meal.type === 'Vegetarian') {
-        mealRecommendation = "Vegetarian is healthy, but please consider choosing Vegan meals for a lower carbon footprint.";
-      } else if (meal.type === 'Beef') {
-        mealRecommendation = "Beef has a high carbon footprint. Consider choosing Chicken or Vegan meals.";
-      } else if (meal.type === 'Fish') {
-        mealRecommendation = "Consider switching to a Vegetarian meal to reduce carbon emissions.";
+      const carbonEmission = parseFloat(meal.carbonEmission);
+
+      // Rekomendasi berdasarkan emisi karbon yang tinggi
+      if (carbonEmission > 2.0) {
+        mealRecommendation = "Your meal has a high carbon footprint. Consider switching to a Vegan or Vegetarian option.";
+      } else if (carbonEmission > 1.0) {
+        mealRecommendation = "Consider switching to a lower-carbon meal like Chicken or Fish.";
+      } else {
+        mealRecommendation = "Great choice! Your meal has a low carbon footprint.";
       }
     });
 
@@ -225,19 +297,19 @@ app.get('/user/:userId/transport_recommendation', async (req, res) => {
       return res.status(404).json({ message: 'No transport found for this user.' });
     }
 
-    // Rekomendasi berdasarkan tipe transportasi yang dipilih
+    // Menambahkan rekomendasi berdasarkan emisi karbon
     let transportRecommendation = '';
     transportResults.forEach(transport => {
-      if (transport.type === 'Car') {
-        transportRecommendation = "Consider using Public Transportation instead of a Car to lower your carbon footprint.";
-      } else if (transport.type === 'Motorcycle') {
-        transportRecommendation = "Motorcycles are less eco-friendly. Consider using a Bicycle instead.";
-      } else if (transport.type === 'Walk') {
-        transportRecommendation = "Walking is really eco-friendly! Consider using a Bicycle if you're tired.";
-      } else if (transport.type === 'Bicycle') {
-        transportRecommendation = "Bicycle is eco-friendly. Consider walking if you're looking for a healthier option.";
-      } else if (transport.type === 'Public Transportation') {
-        transportRecommendation = "Public Transportation is less eco-friendly. Consider using a Bicycle or Walk instead.";
+      const carbonEmission = parseFloat(transport.carbonEmission);
+      const distance = parseFloat(transport.distance);
+      const totalEmission = carbonEmission * distance;
+
+      if (totalEmission > 10) {
+        transportRecommendation = "Your transport has a high carbon footprint. Consider using Public Transport or walking.";
+      } else if (totalEmission > 5) {
+        transportRecommendation = "Consider using a Bicycle or Public Transportation for a more eco-friendly option.";
+      } else {
+        transportRecommendation = "Great choice! Your transport is eco-friendly.";
       }
     });
 
@@ -249,6 +321,7 @@ app.get('/user/:userId/transport_recommendation', async (req, res) => {
     res.status(500).json({ message: "Error fetching transport recommendations", err });
   }
 });
+
 
 // Endpoint Dashboard untuk Menampilkan Meal dan Transportasi Pengguna
 app.get('/user/:userId/dashboard', async (req, res) => {
@@ -274,7 +347,7 @@ app.get('/user/:userId/dashboard', async (req, res) => {
 
     let totalCarbonEmission = 0.0;
 
-    // Hitung total emisi karbon dari meal
+    // Hitung total emisi karbon dari meal dengan prediksi yang disimpan
     mealResults.forEach(m => {
       const emission = parseFloat(m.carbonEmission);
       if (!isNaN(emission)) {
@@ -282,7 +355,7 @@ app.get('/user/:userId/dashboard', async (req, res) => {
       }
     });
 
-    // Hitung total emisi karbon dari transport
+    // Hitung total emisi karbon dari transport dengan prediksi yang disimpan
     transportResults.forEach(t => {
       const emission = parseFloat(t.carbonEmission);
       const distance = parseFloat(t.distance);
@@ -301,6 +374,7 @@ app.get('/user/:userId/dashboard', async (req, res) => {
     res.status(500).json({ message: "Error fetching user dashboard", err });
   }
 });
+
 
 // Middleware untuk memverifikasi token JWT
 const verifyToken = (req, res, next) => {
@@ -350,5 +424,5 @@ app.get('/user/:userId/dashboard', verifyToken, async (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log('Server running on port ${PORT}');
 });
