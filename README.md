@@ -1,5 +1,3 @@
-Absolutely, here's a revised version of your README.md that retains value while being more visually appealing for GitHub:
-
 **# Backend! **
 
 This backend powers a user-friendly application that helps manage meals, transportation, and provides personalized recommendations.
