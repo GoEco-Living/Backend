@@ -7,6 +7,7 @@ Before diving in, ensure you have the following:
 * **Google Cloud SDK:** [https://cloud.google.com/sdk](https://cloud.google.com/sdk)
 * **Docker:** [https://docs.docker.com/engine/install/](https://docs.docker.com/engine/install/)
 * **Google Cloud Run access**
+* **Node.js 18**
 * **Postman for API testing:** [https://www.postman.com/downloads/](https://www.postman.com/downloads/)
 
 **Endpoints**
@@ -49,12 +50,3 @@ Ready to unleash this backend to the world? Here's how to deploy it to Google Cl
    ```
 
 **Remember to replace`<PROJECT-ID>` and `<SERVICE-NAME>` with your own project and service details!**
-
-
-**Additional Notes:**
-
-* Consider adding badges for technologies used (e.g., Python, Flask, Docker).
-* Explore adding screenshots or GIFs to further showcase functionality.
-* Link to any relevant documentation for deeper exploration.
-
-By incorporating these suggestions, your README.md will be both informative and visually appealing, attracting more attention and user engagement on GitHub!
