@@ -1,6 +1,4 @@
-**# Backend! **
-
-This backend powers a user-friendly application that helps manage meals, transportation, and provides personalized recommendations.
+**# Backend!**
 
 **Getting Started** 
 
@@ -11,7 +9,7 @@ Before diving in, ensure you have the following:
 * **Google Cloud Run access**
 * **Postman for API testing:** [https://www.postman.com/downloads/](https://www.postman.com/downloads/)
 
-**Endpoints **
+**Endpoints**
 
 Our backend exposes a range of functionalities:
 
@@ -31,13 +29,13 @@ Our backend exposes a range of functionalities:
 | Dashboard       | GET   | Fetches data for user dashboard visualization.  | 200 (OK)     |
 |                 |        |                                               | 400 (Bad Request) |
 
-**Testing with Postman **
+**Testing with Postman**
 
 1. Import the provided `API.postman_collection.json` into Postman. (Available in the folder!)
 2. Configure environment variables for base URL and tokens.
 3. Unleash your inner tester! Each endpoint is ready for exploration.
 
-**Deployment **
+**Deployment**
 
 Ready to unleash this backend to the world? Here's how to deploy it to Google Cloud Run:
 
@@ -52,7 +50,6 @@ Ready to unleash this backend to the world? Here's how to deploy it to Google Cl
 
 **Remember to replace`<PROJECT-ID>` and `<SERVICE-NAME>` with your own project and service details!**
 
-**We're excited to see this backend power amazing applications! **
 
 **Additional Notes:**
 
